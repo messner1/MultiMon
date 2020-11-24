@@ -9,7 +9,10 @@ from PodSixNet.Connection import connection, ConnectionListener
 
 class pokeInstance(ConnectionListener):
 
-    def __init__(self, rom_path, name):
+    def __init__(self, rom_path, name, host, port):
+        self.host = host
+        self.port = port
+
         self.currMap = -1
         self.x = 0
         self.y = 0
@@ -22,7 +25,7 @@ class pokeInstance(ConnectionListener):
 
 
         self.pyboy = PyBoy(rom_path)
-        self.Connect(('localhost', 1000))
+        self.Connect((self.host, self.port))
         connection.Send({"action": "nickname", "nickname": name})
 
 
@@ -111,8 +114,8 @@ class pokeInstance(ConnectionListener):
             self.Pump()
 
 
-def main(rom_path, name):
-    instance = pokeInstance(rom_path, name)
+def main(rom_path, name, host, port):
+    instance = pokeInstance(rom_path, name, host, port)
     instance.run()
     #pyboy = PyBoy(rom_path)
     #while not pyboy.tick():
@@ -129,6 +132,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('rom_path')
     parser.add_argument('name')
+    parser.add_argument('hostname')
+    parser.add_argument('port', type=int)
     args = parser.parse_args()
 
-    main(args.rom_path, args.name)
+    main(args.rom_path, args.name, args.hostname, args.port)

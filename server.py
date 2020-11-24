@@ -1,6 +1,7 @@
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
 from time import sleep
+import argparse
 
 class ClientChannel(Channel):
 
@@ -39,7 +40,6 @@ class PokeServer(Server):
     def __init__(self, *args, **kwargs):
         Server.__init__(self, *args, **kwargs)
         self.players = {}
-        print('Server launched')
 
     def Connected(self, channel, addr):
         print('new connection:', channel)
@@ -54,8 +54,18 @@ class PokeServer(Server):
         print([p for p in self.players if p.nickname != data['who']])
         [p.Send(data) for p in self.players if p.nickname != data['who']]
 
+    def launch(self):
+        print("Server Launched")
+        while True:
+            self.Pump()
+            sleep(0.001)
 
-pserve = PokeServer(localaddr=('localhost', 1000))
-while True:
-    pserve.Pump()
-    sleep(0.01)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('host')
+    parser.add_argument('port', type=int)
+    args = parser.parse_args()
+
+    pserve = PokeServer(localaddr=(args.host, args.port))
+    pserve.launch()
+
