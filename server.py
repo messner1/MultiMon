@@ -3,6 +3,8 @@ from PodSixNet.Server import Server
 from time import sleep
 import argparse
 
+mObjState = {}
+
 class ClientChannel(Channel):
 
     def __init__(self, *args, **kwargs):
@@ -21,6 +23,9 @@ class ClientChannel(Channel):
         self.map = data['newMap']
         self._server.sendToPlayer({"action": "rivalMapChange", "rivalMap": self.map, "who": self.nickname})
 
+        #send mobj to self on mapchange
+        self.Send({"action": "objUpdate", "objFlags": mObjState})
+
     def Network_updatePos(self, data):
         print("updatePos:", data)
         self.x = data['x']
@@ -30,6 +35,10 @@ class ClientChannel(Channel):
 
     def Network_nickname(self, data):
         self.nickname = data['nickname']
+
+    def Network_missableObjectsUpdate(self, data):
+        mObjState[data["map"]] = data["mObjs"]
+        self._server.sendToAll({"action": "objUpdate", "objFlags": mObjState})
 
 
 
@@ -53,6 +62,9 @@ class PokeServer(Server):
     def sendToPlayer(self, data):
         print([p for p in self.players if p.nickname != data['who']])
         [p.Send(data) for p in self.players if p.nickname != data['who']]
+
+    def sendToAll(self, data):
+        [p.Send(data) for p in self.players]
 
     def launch(self):
         print("Server Launched")
