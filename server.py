@@ -3,17 +3,21 @@ from PodSixNet.Server import Server
 from time import sleep
 import argparse
 
+from pkdefs import pokedexOwned
+
 mObjState = {}
 
 class ClientChannel(Channel):
 
     def __init__(self, *args, **kwargs):
+        Channel.__init__(self, *args, **kwargs)
+
         self.nickname = "anonymous"
         self.x = -1
         self.y = -1
         self.map = -1
         self.facing = 0
-        Channel.__init__(self, *args, **kwargs)
+
 
     def Network(self, data):
         print(data)
@@ -23,7 +27,7 @@ class ClientChannel(Channel):
         self.map = data['newMap']
         self._server.sendToPlayer({"action": "rivalMapChange", "rivalMap": self.map, "who": self.nickname})
 
-        #send mobj to self on mapchange
+        #send missable items obj to self on mapchange
         self.Send({"action": "objUpdate", "objFlags": mObjState})
 
     def Network_updatePos(self, data):
@@ -39,6 +43,9 @@ class ClientChannel(Channel):
     def Network_missableObjectsUpdate(self, data):
         mObjState[data["map"]] = data["mObjs"]
         self._server.sendToAll({"action": "objUpdate", "objFlags": mObjState})
+
+    def Network_pokedexUpdate(self, data):
+        self._server.sendToPlayer({"action": "lockoutUpdate", "newLockouts": data["lockouts"], "who":self.nickname})
 
 
 

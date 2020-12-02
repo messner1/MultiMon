@@ -6,13 +6,18 @@ from pyboy import PyBoy
 import argparse
 from PodSixNet.Connection import connection, ConnectionListener
 
-import io
+from pkdefs import pokedexOwned
 
 
 class pokeInstance(ConnectionListener):
 
     def __init__(self, rom_path, name, host, port, savestate):
         self.pyboy = PyBoy(rom_path)
+
+        if savestate:
+            file_like_object = open(savestate, "rb")
+            self.pyboy.load_state(file_like_object)
+
         self.host = host
         self.port = port
 
@@ -28,9 +33,11 @@ class pokeInstance(ConnectionListener):
 
         self.prevmoFlags = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-        if savestate:
-            file_like_object = open(savestate, "rb")
-            self.pyboy.load_state(file_like_object)
+        #initial dex
+        self.pokedex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7,0xD30A)])
+
+        #list of wild pokemon locked out by opp
+        self.lockedOutWilds = []
 
 
         self.Connect((self.host, self.port))
@@ -68,6 +75,13 @@ class pokeInstance(ConnectionListener):
         else:
             return []
 
+    def checkPokedexUpdate(self):
+        #this range contains the "owned" pokedex
+        newDex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7, 0xD30A)])
+        if self.pokedex.dex != newDex.dex:
+            print("dex update")
+            self.pokedex.dex = newDex.dex
+            self.Send({"action": "pokedexUpdate", "lockouts":self.pokedex.createLockouts()})
 
     def missableObjectsFlags(self):
         #Flags for missable objects -- lockout
@@ -99,6 +113,17 @@ class pokeInstance(ConnectionListener):
             self.x = newx
             connection.Send({"action": "updatePos", "x": self.x, "y": self.y, "facing": facing})
 
+    def checkInBattleIfLockedOut(self):
+        #could also only grab new lockout when a battle triggers
+        #cfe5 pokemon id in battle
+        #d057 battle type -- 1 for wild
+        #just make catch rate 0? (D007) Use the unidentified ghost thing?
+        #ghosts use same id,
+        #currently just use catch rate 0 solution, though this should not fully work due to status effects
+        if self.pyboy.get_memory_value(0xd057) == 1:
+            if self.pyboy.get_memory_value(0xCFE5) in self.lockedOutWilds:
+                self.pyboy.set_memory_value(0xD007, 0x00)
+
     def Network_rivalMapChange(self, data):
         self.rivalMap = data["rivalMap"]
 
@@ -114,6 +139,12 @@ class pokeInstance(ConnectionListener):
             endMissableRange = 0xD5C5
             for flag, rangeLoc in zip(data["objFlags"][self.currMap], range(startMissableRange, endMissableRange+1)):
                 self.pyboy.set_memory_value(rangeLoc, flag)
+
+    def Network_lockoutUpdate(self, data):
+        self.lockedOutWilds = data["newLockouts"]
+        print("lockouts: ")
+        print(self.lockedOutWilds)
+
 
     def checkRivalInView(self):
         if self.rivalMap == self.currMap:
@@ -139,6 +170,8 @@ class pokeInstance(ConnectionListener):
             self.updatePos()
             self.checkRivalInView()
             self.missableObjectsFlags()
+            self.checkPokedexUpdate()
+            self.checkInBattleIfLockedOut()
             connection.Pump()
             self.Pump()
 
