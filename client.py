@@ -6,7 +6,7 @@ from pyboy import PyBoy
 import argparse
 from PodSixNet.Connection import connection, ConnectionListener
 
-from pkdefs import pokedexOwned
+from pkdefs import pokedexOwned, sprite
 
 
 class pokeInstance(ConnectionListener):
@@ -32,6 +32,8 @@ class pokeInstance(ConnectionListener):
         self.rivalSpriteNum = 15
 
         self.prevmoFlags = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.rivalSprite = []
+        self.sprite = []
 
         #initial dex
         self.pokedex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7,0xD30A)])
@@ -39,11 +41,15 @@ class pokeInstance(ConnectionListener):
         #list of wild pokemon locked out by opp
         self.lockedOutWilds = []
 
+        #game options
+        self.gameOptions = None
+
 
         self.Connect((self.host, self.port))
         connection.Send({"action": "nickname", "nickname": name})
 
 
+    #insert a sprite block into memory at the sprite location (two 16 byte chunks at C100 and C200
     def setViewSprite(self, offset, data):
         block_1_offset = 0xC100
         block_2_offset = 0xC200
@@ -58,7 +64,7 @@ class pokeInstance(ConnectionListener):
             self.pyboy.set_memory_value(block_2_offset+sprite_id+index, byte)
 
 
-
+    #get the data of the given sprite number, so the sprite at the offset X
     def getViewSprites(self, sprite_num):
         block_1_offset = 0xC100
         block_2_offset = 0xC200
@@ -75,6 +81,7 @@ class pokeInstance(ConnectionListener):
         else:
             return []
 
+    #Dex used to track caught pokemon for wild catch lockout
     def checkPokedexUpdate(self):
         #this range contains the "owned" pokedex
         newDex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7, 0xD30A)])
@@ -97,7 +104,7 @@ class pokeInstance(ConnectionListener):
             self.Send({"action": "mapChange", "newMap": self.pyboy.get_memory_value(0xD35E)})
             self.currMap = self.pyboy.get_memory_value(0xD35E)
 
-            #if we change maps, check for the slot in which to put the rival sprite
+            #if we change maps, check for an unused slot in which to put the rival sprite
             for sp in range(2,15):
                 potentialSprite = self.getViewSprites(sp)
                 if potentialSprite and potentialSprite[0] == 0:
@@ -107,11 +114,12 @@ class pokeInstance(ConnectionListener):
     def updatePos(self):
         newx = self.pyboy.get_memory_value(0xD362)
         newy = self.pyboy.get_memory_value(0xD361)
-        facing = self.pyboy.get_memory_value(0xC102)
-        if self.y != newy or self.x != newx:
+        if self.sprite != self.getViewSprites(0):
+        #if self.y != newy or self.x != newx:
             self.y = newy
             self.x = newx
-            connection.Send({"action": "updatePos", "x": self.x, "y": self.y, "facing": facing})
+            self.sprite = self.getViewSprites(0)
+            connection.Send({"action": "updatePos", "x": self.x, "y": self.y, "sprite": self.sprite})
 
     def checkInBattleIfLockedOut(self):
         #could also only grab new lockout when a battle triggers
@@ -123,6 +131,15 @@ class pokeInstance(ConnectionListener):
         if self.pyboy.get_memory_value(0xd057) == 1:
             if self.pyboy.get_memory_value(0xCFE5) in self.lockedOutWilds:
                 self.pyboy.set_memory_value(0xD007, 0x00)
+                # c3ae-c3b3 -- upper right of battle screen, use tiles to write "caught" there if locked out
+                message = [0x82, 0x80, 0x94, 0x86, 0x87, 0x93] #"caught"
+                for index, adr in enumerate(range(0xC3AE, 0xC3B4)):
+                    self.pyboy.set_memory_value(adr, message[index])
+
+    def Network_getGameOptions(self, data):
+        self.gameOptions = data["game_options"]
+        print("Game Options:")
+        print(self.gameOptions)
 
     def Network_rivalMapChange(self, data):
         self.rivalMap = data["rivalMap"]
@@ -130,7 +147,7 @@ class pokeInstance(ConnectionListener):
     def Network_rivalPosChange(self, data):
         self.rivalX = data['x']
         self.rivalY = data['y']
-        self.rivalFacing = data['facing']
+        self.rivalSprite = data["rivalSprite"]
 
     def Network_objUpdate(self, data):
         print("Recieved mflags", data["objFlags"])
@@ -152,26 +169,32 @@ class pokeInstance(ConnectionListener):
             #print(self.x, self.rivalX, self.y, self.rivalY)
             #tl 0,0 br 128, 144 (yx)
             #so if the difference in positions is zero, then the rival should be (pixelwise) at 64, 72
-            adjx = 72 + (self.rivalX - self.x) * 16
-            adjy = 64 + (self.rivalY - self.y) * 16
-            #print(self.rivalY, self.rivalX, adjy, adjx)
+            adjx = (72 + (self.rivalX - self.x) * 16) - 4
+            adjy = (64 + (self.rivalY - self.y) * 16) - 4   #always adjusted by 4 to appear central in tile. Not sure about X
 
             #48 down, 52 up, 56 left, 60 right
             #for player 0 down, 4 up, 8 left, 12 right
+            self.rivalSprite[4] = adjy
+            self.rivalSprite[6] = adjx
 
             if adjy >= 0 and adjy <= 128 and adjx >=0 and adjx < 136:
-                self.setViewSprite(15, [1, 2, self.rivalFacing, 0, adjy, 0, adjx, 0, 0, 12, 96, 64, 0, 0, 0, 0, 0, 0, 8, 8, self.rivalY, self.rivalX, 255, 0, 22, 0, 0, 0, 0, 0, 1, 0])
+                self.setViewSprite(self.rivalSpriteNum, self.rivalSprite)
+                #self.setViewSprite(self.rivalSpriteNum, [1, 2, self.rivalFacing, 0, adjy, 0, adjx, 0, 0, 12, 96, 64, 0, 0, 0, 0, 0, 0, 8, 8, self.rivalY, self.rivalX, 255, 0, 22, 0, 0, 0, 0, 0, 1, 0])
             else:
-                self.setViewSprite(15, [0 for a in range(0,32)])
+                self.setViewSprite(self.rivalSpriteNum, [0 for a in range(0,32)])
 
     def run(self):
         while not self.pyboy.tick():
-            self.checkMapChange()
-            self.updatePos()
-            self.checkRivalInView()
-            self.missableObjectsFlags()
-            self.checkPokedexUpdate()
-            self.checkInBattleIfLockedOut()
+            if self.gameOptions:
+                self.checkMapChange()
+                if self.gameOptions["position"]:
+                    self.updatePos()
+                    self.checkRivalInView()
+                if self.gameOptions["items"]:
+                    self.missableObjectsFlags()
+                if self.gameOptions["wilds"]:
+                    self.checkPokedexUpdate()
+                    self.checkInBattleIfLockedOut()
             connection.Pump()
             self.Pump()
 
@@ -179,13 +202,6 @@ class pokeInstance(ConnectionListener):
 def main(rom_path, name, host, port, savestate):
     instance = pokeInstance(rom_path, name, host, port, savestate)
     instance.run()
-    #pyboy = PyBoy(rom_path)
-    #while not pyboy.tick():
-     #   #connection.Send({"action": "mapChange", "mapNum": pyboy.get_memory_value(0xD35E)})
-      #  print("seconds:", pyboy.get_memory_value(0xDA44)) #game timer
-       # print("map:",pyboy.get_memory_value(0xD35E)) #map number
-       # print("x",pyboy.get_memory_value(0xD361)) #x
-       # print("y",pyboy.get_memory_value(0xD362)) #y
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(order=True)
 class sprite:
     pic_id: int = 0
     movement_status: int = 0

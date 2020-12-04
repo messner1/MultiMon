@@ -3,7 +3,7 @@ from PodSixNet.Server import Server
 from time import sleep
 import argparse
 
-from pkdefs import pokedexOwned
+
 
 mObjState = {}
 
@@ -34,8 +34,7 @@ class ClientChannel(Channel):
         print("updatePos:", data)
         self.x = data['x']
         self.y = data['y']
-        self.facing = data['facing']
-        self._server.sendToPlayer({"action": "rivalPosChange", "x": self.x, "y": self.y, "facing": self.facing, "who": self.nickname})
+        self._server.sendToPlayer({"action": "rivalPosChange", "x": self.x, "y": self.y, "rivalSprite": data["sprite"], "who": self.nickname})
 
     def Network_nickname(self, data):
         self.nickname = data['nickname']
@@ -56,6 +55,7 @@ class PokeServer(Server):
     def __init__(self, *args, **kwargs):
         Server.__init__(self, *args, **kwargs)
         self.players = {}
+        self.serverOptions = None
 
     def Connected(self, channel, addr):
         print('new connection:', channel)
@@ -65,6 +65,7 @@ class PokeServer(Server):
         print("New Player" + str(player.addr))
         self.players[player] = True
         print(self.players)
+        player.Send({"action": "getGameOptions", "game_options": self.serverOptions})
 
     def sendToPlayer(self, data):
         print([p for p in self.players if p.nickname != data['who']])
@@ -73,8 +74,11 @@ class PokeServer(Server):
     def sendToAll(self, data):
         [p.Send(data) for p in self.players]
 
-    def launch(self):
+    def launch(self, server_options):
         print("Server Launched")
+        print("Game Options:")
+        print(server_options)
+        self.serverOptions = server_options
         while True:
             self.Pump()
             sleep(0.001)
@@ -83,8 +87,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('host')
     parser.add_argument('port', type=int)
+    parser.add_argument('-items', action='store_true', default=False)
+    parser.add_argument('-wilds', action='store_true', default=False)
+    parser.add_argument('-position', action='store_true', default=False)
+
     args = parser.parse_args()
 
+    server_options = {"items": args.items, "wilds": args.wilds, "position": args.position}
+
     pserve = PokeServer(localaddr=(args.host, args.port))
-    pserve.launch()
+    pserve.launch(server_options)
 
