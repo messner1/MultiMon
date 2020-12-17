@@ -13,8 +13,8 @@ class ClientChannel(Channel):
         Channel.__init__(self, *args, **kwargs)
 
         self.nickname = "anonymous"
-        self.x = -1
-        self.y = -1
+        self.x = 0
+        self.y = 0
         self.map = -1
         self.facing = 0
 
@@ -46,6 +46,8 @@ class ClientChannel(Channel):
     def Network_pokedexUpdate(self, data):
         self._server.sendToPlayer({"action": "lockoutUpdate", "newLockouts": data["lockouts"], "who":self.nickname})
 
+    def Close(self):
+        self._server.delPlayer(self)
 
 
 class PokeServer(Server):
@@ -66,6 +68,12 @@ class PokeServer(Server):
         self.players[player] = True
         print(self.players)
         player.Send({"action": "getGameOptions", "game_options": self.serverOptions})
+
+    def delPlayer(self, player):
+        print("Deleting Player: " + player.nickname)
+        del self.players[player]
+        print("Players:")
+        print(self.players)
 
     def sendToPlayer(self, data):
         print([p for p in self.players if p.nickname != data['who']])
@@ -90,10 +98,12 @@ if __name__ == '__main__':
     parser.add_argument('-items', action='store_true', default=False)
     parser.add_argument('-wilds', action='store_true', default=False)
     parser.add_argument('-position', action='store_true', default=False)
+    parser.add_argument('-max_connections', type=int, default=2)
+    parser.add_argument('-password', default = None)
 
     args = parser.parse_args()
 
-    server_options = {"items": args.items, "wilds": args.wilds, "position": args.position}
+    server_options = {"items": args.items, "wilds": args.wilds, "position": args.position, "max_connects": args.max_connections, "password":args.password}
 
     pserve = PokeServer(localaddr=(args.host, args.port))
     pserve.launch(server_options)

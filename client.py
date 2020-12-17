@@ -8,6 +8,8 @@ from PodSixNet.Connection import connection, ConnectionListener
 
 from pkdefs import pokedexOwned, sprite
 
+from constants import *
+
 
 class pokeInstance(ConnectionListener):
 
@@ -32,11 +34,11 @@ class pokeInstance(ConnectionListener):
         self.rivalSpriteNum = 15
 
         self.prevmoFlags = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        self.rivalSprite = []
+        self.rivalSprite = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.sprite = []
 
         #initial dex
-        self.pokedex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7,0xD30A)])
+        self.pokedex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(POKEDEX_RANGE_START,POKEDEX_RANGE_END+1)])
 
         #list of wild pokemon locked out by opp
         self.lockedOutWilds = []
@@ -44,7 +46,7 @@ class pokeInstance(ConnectionListener):
         #game options
         self.gameOptions = None
 
-
+        #connect to server and send nickname
         self.Connect((self.host, self.port))
         connection.Send({"action": "nickname", "nickname": name})
 
@@ -84,7 +86,7 @@ class pokeInstance(ConnectionListener):
     #Dex used to track caught pokemon for wild catch lockout
     def checkPokedexUpdate(self):
         #this range contains the "owned" pokedex
-        newDex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(0xD2F7, 0xD30A)])
+        newDex = pokedexOwned([self.pyboy.get_memory_value(t) for t in range(POKEDEX_RANGE_START, POKEDEX_RANGE_END+1)])
         if self.pokedex.dex != newDex.dex:
             print("dex update")
             self.pokedex.dex = newDex.dex
@@ -92,17 +94,15 @@ class pokeInstance(ConnectionListener):
 
     def missableObjectsFlags(self):
         #Flags for missable objects -- lockout
-        startMissableRange = 0xD5A6
-        endMissableRange = 0xD5C5
-        mFlags = [self.pyboy.get_memory_value(rangeLoc) for rangeLoc in range(startMissableRange, endMissableRange+1)]
+        mFlags = [self.pyboy.get_memory_value(rangeLoc) for rangeLoc in range(START_MISSABLE_RANGE, END_MISSABLE_RANGE+1)]
         if mFlags != self.prevmoFlags:
             self.Send({"action": "missableObjectsUpdate", "mObjs": mFlags, "map": self.currMap})
             self.prevmoFlags = mFlags
 
     def checkMapChange(self):
-        if self.currMap != self.pyboy.get_memory_value(0xD35E): #map number memory value
-            self.Send({"action": "mapChange", "newMap": self.pyboy.get_memory_value(0xD35E)})
-            self.currMap = self.pyboy.get_memory_value(0xD35E)
+        if self.currMap != self.pyboy.get_memory_value(MAP_NUMBER): #map number memory value
+            self.Send({"action": "mapChange", "newMap": self.pyboy.get_memory_value(MAP_NUMBER)})
+            self.currMap = self.pyboy.get_memory_value(MAP_NUMBER)
 
             #if we change maps, check for an unused slot in which to put the rival sprite
             for sp in range(2,15):
@@ -128,13 +128,34 @@ class pokeInstance(ConnectionListener):
         #just make catch rate 0? (D007) Use the unidentified ghost thing?
         #ghosts use same id,
         #currently just use catch rate 0 solution, though this should not fully work due to status effects
-        if self.pyboy.get_memory_value(0xd057) == 1:
-            if self.pyboy.get_memory_value(0xCFE5) in self.lockedOutWilds:
-                self.pyboy.set_memory_value(0xD007, 0x00)
+        if self.pyboy.get_memory_value(BATTLE_TYPE) == WILD_POKEMON_BATTLE:
+            if self.pyboy.get_memory_value(POKEMON_ID) in self.lockedOutWilds:
+                self.pyboy.set_memory_value(CATCH_RATE, 0x00)
                 # c3ae-c3b3 -- upper right of battle screen, use tiles to write "caught" there if locked out
-                message = [0x82, 0x80, 0x94, 0x86, 0x87, 0x93] #"caught"
                 for index, adr in enumerate(range(0xC3AE, 0xC3B4)):
-                    self.pyboy.set_memory_value(adr, message[index])
+                    self.pyboy.set_memory_value(adr, CAUGHT_MESSAGE[index])
+
+    def checkRivalInView(self):
+        if self.rivalMap == self.currMap:
+            #print('same map')
+            #print(self.x, self.rivalX, self.y, self.rivalY)
+            #tl 0,0 br 128, 144 (yx)
+            #so if the difference in positions is zero, then the rival should be (pixelwise) at 64, 72
+            adjx = (72 + (self.rivalX - self.x) * 16) - 4
+            adjy = (64 + (self.rivalY - self.y) * 16) - 4   #always adjusted by 4 to appear central in tile. Not sure about X
+
+            #48 down, 52 up, 56 left, 60 right
+            #for player 0 down, 4 up, 8 left, 12 right
+            self.rivalSprite[4] = adjy
+            self.rivalSprite[6] = adjx
+
+            if adjy >= 0 and adjy <= 128 and adjx >=0 and adjx < 136:
+                self.setViewSprite(self.rivalSpriteNum, self.rivalSprite)
+                #self.setViewSprite(self.rivalSpriteNum, [1, 2, self.rivalFacing, 0, adjy, 0, adjx, 0, 0, 12, 96, 64, 0, 0, 0, 0, 0, 0, 8, 8, self.rivalY, self.rivalX, 255, 0, 22, 0, 0, 0, 0, 0, 1, 0])
+            else:
+                self.setViewSprite(self.rivalSpriteNum, [0 for a in range(0,32)])
+
+    #NETWORK CALLBACKS
 
     def Network_getGameOptions(self, data):
         self.gameOptions = data["game_options"]
@@ -162,26 +183,18 @@ class pokeInstance(ConnectionListener):
         print("lockouts: ")
         print(self.lockedOutWilds)
 
+    def Network_connected(self, data):
+        print("Connected to server at ", self.host)
 
-    def checkRivalInView(self):
-        if self.rivalMap == self.currMap:
-            #print('same map')
-            #print(self.x, self.rivalX, self.y, self.rivalY)
-            #tl 0,0 br 128, 144 (yx)
-            #so if the difference in positions is zero, then the rival should be (pixelwise) at 64, 72
-            adjx = (72 + (self.rivalX - self.x) * 16) - 4
-            adjy = (64 + (self.rivalY - self.y) * 16) - 4   #always adjusted by 4 to appear central in tile. Not sure about X
+    def Network_error(self, data):
+        print('error:', data['error'][1])
+        connection.Close()
 
-            #48 down, 52 up, 56 left, 60 right
-            #for player 0 down, 4 up, 8 left, 12 right
-            self.rivalSprite[4] = adjy
-            self.rivalSprite[6] = adjx
+    def Network_disconnected(self, data):
+        print('Disconnected')
+        exit()
 
-            if adjy >= 0 and adjy <= 128 and adjx >=0 and adjx < 136:
-                self.setViewSprite(self.rivalSpriteNum, self.rivalSprite)
-                #self.setViewSprite(self.rivalSpriteNum, [1, 2, self.rivalFacing, 0, adjy, 0, adjx, 0, 0, 12, 96, 64, 0, 0, 0, 0, 0, 0, 8, 8, self.rivalY, self.rivalX, 255, 0, 22, 0, 0, 0, 0, 0, 1, 0])
-            else:
-                self.setViewSprite(self.rivalSpriteNum, [0 for a in range(0,32)])
+
 
     def run(self):
         while not self.pyboy.tick():
@@ -197,6 +210,7 @@ class pokeInstance(ConnectionListener):
                     self.checkInBattleIfLockedOut()
             connection.Pump()
             self.Pump()
+        connection.Close()
 
 
 def main(rom_path, name, host, port, savestate):
