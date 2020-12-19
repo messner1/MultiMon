@@ -39,12 +39,26 @@ class ClientChannel(Channel):
     def Network_nickname(self, data):
         self.nickname = data['nickname']
 
+    def Network_verifyPasswordCheckCapacity(self, data):
+        if self._server.serverOptions["password"] is not None:
+            if data["password"] != self._server.serverOptions["password"]:
+                self.Send({"action": "error", "error": ["","Wrong Password"]})
+
+        if len(self._server.players) > self._server.serverOptions["max_connects"]:
+            self.Send({"action": "error", "error": ["", "Server at Capacity"]})
+
     def Network_missableObjectsUpdate(self, data):
         mObjState[data["map"]] = data["mObjs"]
         self._server.sendToAll({"action": "objUpdate", "objFlags": mObjState})
 
     def Network_pokedexUpdate(self, data):
         self._server.sendToPlayer({"action": "lockoutUpdate", "newLockouts": data["lockouts"], "who":self.nickname})
+
+    def Network_badgeUpdate(self, data):
+        print("Badge Change")
+        print(data["badges"])
+        if self._server.serverOptions["badge_win"] in data["badges"]:
+            print("Player " + self.nickname + " wins")
 
     def Close(self):
         self._server.delPlayer(self)
@@ -63,11 +77,12 @@ class PokeServer(Server):
         print('new connection:', channel)
         self.addPlayer(channel)
 
+
     def addPlayer(self, player):
         print("New Player" + str(player.addr))
         self.players[player] = True
         print(self.players)
-        player.Send({"action": "getGameOptions", "game_options": self.serverOptions})
+        player.Send({"action": "getGameOptions", "game_options": {key: value for key, value in self.serverOptions.items() if key != "password"}})
 
     def delPlayer(self, player):
         print("Deleting Player: " + player.nickname)
@@ -76,7 +91,7 @@ class PokeServer(Server):
         print(self.players)
 
     def sendToPlayer(self, data):
-        print([p for p in self.players if p.nickname != data['who']])
+        #print([p for p in self.players if p.nickname != data['who']])
         [p.Send(data) for p in self.players if p.nickname != data['who']]
 
     def sendToAll(self, data):
@@ -99,11 +114,15 @@ if __name__ == '__main__':
     parser.add_argument('-wilds', action='store_true', default=False)
     parser.add_argument('-position', action='store_true', default=False)
     parser.add_argument('-max_connections', type=int, default=2)
-    parser.add_argument('-password', default = None)
+    parser.add_argument('-password', default=None)
+    parser.add_argument('-badge_win', default=None)
 
     args = parser.parse_args()
 
-    server_options = {"items": args.items, "wilds": args.wilds, "position": args.position, "max_connects": args.max_connections, "password":args.password}
+    server_options = {"items": args.items, "wilds": args.wilds, "position": args.position,
+                      "max_connects": args.max_connections, "password":args.password,
+                      "badge_win": args.badge_win
+                      }
 
     pserve = PokeServer(localaddr=(args.host, args.port))
     pserve.launch(server_options)

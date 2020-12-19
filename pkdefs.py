@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+from constants import *
 
 @dataclass(order=True)
 class sprite:
@@ -224,4 +224,36 @@ class pokedexOwned:
     #generate list of wild ids that should be locked out based on the dex
     def createLockouts(self):
         return [dexIdTable[index] for index, isCaught in enumerate(self.dex) if isCaught == 1]
+
+#Index into bitfield stored at memory location. If bit is 1, badge has been obtained. Little endian.
+badges = [
+    "BoulderBadge",
+    "CascadeBadge",
+    "ThunderBadge",
+    "RainbowBadge",
+    "SoulBadge",
+    "MarshBadge",
+    "VolcanoBadge",
+    "EarthBadge"
+]
+
+class badgesOwned:
+    def __init__(self, initial_block):
+        self.badges = self.decodeBadges(initial_block)
+
+
+    def decodeBadges(self, block):
+        #Same process as pokedex. Reverse due to little-endian-ness
+        bin_rep = [int(t) for t in format(block, 'b')]
+        bin_rep.reverse()
+        padded = bin_rep + [0 for t in range(0,8-len(bin_rep))]
+        return [badges[index] for index, value in enumerate(padded) if value == 1]
+
+    def checkBadgeUpdate(self, block):
+        new_badges = self.decodeBadges(block)
+        if self.badges != new_badges:
+            self.badges = new_badges
+            return self.badges
+        else:
+            return False
 

@@ -6,14 +6,14 @@ from pyboy import PyBoy
 import argparse
 from PodSixNet.Connection import connection, ConnectionListener
 
-from pkdefs import pokedexOwned, sprite
+from pkdefs import pokedexOwned, badgesOwned
 
 from constants import *
 
 
 class pokeInstance(ConnectionListener):
 
-    def __init__(self, rom_path, name, host, port, savestate):
+    def __init__(self, rom_path, name, host, port, savestate, password):
         self.pyboy = PyBoy(rom_path)
 
         if savestate:
@@ -43,12 +43,18 @@ class pokeInstance(ConnectionListener):
         #list of wild pokemon locked out by opp
         self.lockedOutWilds = []
 
+        #initial badges
+        self.badges = badgesOwned(self.pyboy.get_memory_value(BADGES_ACQUIRED))
+
         #game options
         self.gameOptions = None
 
         #connect to server and send nickname
         self.Connect((self.host, self.port))
         connection.Send({"action": "nickname", "nickname": name})
+
+        #reaaal basic passwording here
+        connection.Send({"action": "verifyPasswordCheckCapacity", "password": password})
 
 
     #insert a sprite block into memory at the sprite location (two 16 byte chunks at C100 and C200
@@ -128,6 +134,10 @@ class pokeInstance(ConnectionListener):
         #just make catch rate 0? (D007) Use the unidentified ghost thing?
         #ghosts use same id,
         #currently just use catch rate 0 solution, though this should not fully work due to status effects
+
+        #testing confirms that master ball and statused pokemon can still be caught. latter should be easy to hack -- just
+        #make it so they can't be statused if they are a caught wild. former is harder, as it is a subroutine run before
+        #the catch calculation
         if self.pyboy.get_memory_value(BATTLE_TYPE) == WILD_POKEMON_BATTLE:
             if self.pyboy.get_memory_value(POKEMON_ID) in self.lockedOutWilds:
                 self.pyboy.set_memory_value(CATCH_RATE, 0x00)
@@ -154,6 +164,12 @@ class pokeInstance(ConnectionListener):
                 #self.setViewSprite(self.rivalSpriteNum, [1, 2, self.rivalFacing, 0, adjy, 0, adjx, 0, 0, 12, 96, 64, 0, 0, 0, 0, 0, 0, 8, 8, self.rivalY, self.rivalX, 255, 0, 22, 0, 0, 0, 0, 0, 1, 0])
             else:
                 self.setViewSprite(self.rivalSpriteNum, [0 for a in range(0,32)])
+
+    def sendBadgesIfChanged(self):
+        potential_badges = self.badges.checkBadgeUpdate(self.pyboy.get_memory_value(BADGES_ACQUIRED))
+        if potential_badges is not False:
+            self.Send({"action": "badgeUpdate", "badges": potential_badges})
+
 
     #NETWORK CALLBACKS
 
@@ -208,13 +224,15 @@ class pokeInstance(ConnectionListener):
                 if self.gameOptions["wilds"]:
                     self.checkPokedexUpdate()
                     self.checkInBattleIfLockedOut()
+                if self.gameOptions["badge_win"]:
+                    self.sendBadgesIfChanged()
             connection.Pump()
             self.Pump()
         connection.Close()
 
 
-def main(rom_path, name, host, port, savestate):
-    instance = pokeInstance(rom_path, name, host, port, savestate)
+def main(rom_path, name, host, port, savestate, password):
+    instance = pokeInstance(rom_path, name, host, port, savestate, password)
     instance.run()
 
 
@@ -226,8 +244,9 @@ if __name__ == '__main__':
     parser.add_argument('name')
     parser.add_argument('hostname')
     parser.add_argument('port', type=int)
-    parser.add_argument('--savestate', default=None)
+    parser.add_argument('-savestate', default=None)
+    parser.add_argument('-password', default=None)
 
     args = parser.parse_args()
 
-    main(args.rom_path, args.name, args.hostname, args.port, args.savestate)
+    main(args.rom_path, args.name, args.hostname, args.port, args.savestate, args.password)
