@@ -1,6 +1,6 @@
 
 import os
-os.environ["PYSDL2_DLL_PATH"] = "C:\\Users\\Craig\\Desktop\\Multimon\\"
+os.environ["PYSDL2_DLL_PATH"] = "."
 
 from pyboy import PyBoy
 import argparse
@@ -128,19 +128,15 @@ class pokeInstance(ConnectionListener):
             connection.Send({"action": "updatePos", "x": self.x, "y": self.y, "sprite": self.sprite})
 
     def checkInBattleIfLockedOut(self):
-        #could also only grab new lockout when a battle triggers
-        #cfe5 pokemon id in battle
-        #d057 battle type -- 1 for wild
-        #just make catch rate 0? (D007) Use the unidentified ghost thing?
-        #ghosts use same id,
-        #currently just use catch rate 0 solution, though this should not fully work due to status effects
+        #force locked out pokemon to have zero catch rate. due to the uniqueness of the gen 1 catch algorithm
+        #if the pokemon has a status effect it could still be caught. force that to zero as well.
+        #masterball still gets around this as it calls a subroutine before the calculation proper.
+        #will have to fix later
 
-        #testing confirms that master ball and statused pokemon can still be caught. latter should be easy to hack -- just
-        #make it so they can't be statused if they are a caught wild. former is harder, as it is a subroutine run before
-        #the catch calculation
         if self.pyboy.get_memory_value(BATTLE_TYPE) == WILD_POKEMON_BATTLE:
             if self.pyboy.get_memory_value(POKEMON_ID) in self.lockedOutWilds:
                 self.pyboy.set_memory_value(CATCH_RATE, 0x00)
+                self.pyboy.set_memory_value(ENEMY_STATUS, 0x00)
                 # c3ae-c3b3 -- upper right of battle screen, use tiles to write "caught" there if locked out
                 for index, adr in enumerate(range(0xC3AE, 0xC3B4)):
                     self.pyboy.set_memory_value(adr, CAUGHT_MESSAGE[index])
@@ -198,6 +194,13 @@ class pokeInstance(ConnectionListener):
         self.lockedOutWilds = data["newLockouts"]
         print("lockouts: ")
         print(self.lockedOutWilds)
+
+    def Network_gameWin(self, data):
+        print(data["player"])
+        print("wins via")
+        print(data["condition"])
+        exit()
+
 
     def Network_connected(self, data):
         print("Connected to server at ", self.host)

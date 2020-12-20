@@ -23,6 +23,9 @@ POKEMON_ID = 0xCFE5
 #Catch rate for pokemon in encounter -- theoretically setting it to zero isn't a perfect solution (status effect/master ball)
 CATCH_RATE = 0xD007
 
+#Status for enemy in encounter -- have to remove the possiblity of status to keep locked out pokemon uncatchable
+ENEMY_STATUS = 0xCFE9
+
 #Constants for sprite data.
 SPRITE_BLOCK_1_OFFSET = 0xC100
 SPRITE_BLOCK_2_OFFSET = 0xC200

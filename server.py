@@ -31,7 +31,6 @@ class ClientChannel(Channel):
         self.Send({"action": "objUpdate", "objFlags": mObjState})
 
     def Network_updatePos(self, data):
-        print("updatePos:", data)
         self.x = data['x']
         self.y = data['y']
         self._server.sendToPlayer({"action": "rivalPosChange", "x": self.x, "y": self.y, "rivalSprite": data["sprite"], "who": self.nickname})
@@ -59,6 +58,7 @@ class ClientChannel(Channel):
         print(data["badges"])
         if self._server.serverOptions["badge_win"] in data["badges"]:
             print("Player " + self.nickname + " wins")
+            self._server.sendToAll({"action": "gameWin", "player": self.nickname, "condition": self._server.serverOptions["badge_win"]})
 
     def Close(self):
         self._server.delPlayer(self)
