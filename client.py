@@ -1,4 +1,4 @@
-
+import ctypes.wintypes
 import os
 os.environ["PYSDL2_DLL_PATH"] = "."
 
@@ -169,6 +169,14 @@ class pokeInstance(ConnectionListener):
 
     #NETWORK CALLBACKS
 
+    def Network_forceGamestateUpdate(self, data):
+        #resend all info to server upon a new player joining so that they have initial states
+        self.Send({"action": "badgeUpdate", "badges": self.badges.badges})
+        connection.Send({"action": "updatePos", "x": self.x, "y": self.y, "sprite": self.sprite})
+        self.Send({"action": "mapChange", "newMap": self.currMap})
+        self.Send({"action": "pokedexUpdate", "lockouts": self.pokedex.createLockouts()})
+
+
     def Network_getGameOptions(self, data):
         self.gameOptions = data["game_options"]
         print("Game Options:")
@@ -243,13 +251,33 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('rom_path')
-    parser.add_argument('name')
-    parser.add_argument('hostname')
-    parser.add_argument('port', type=int)
+    parser.add_argument('rom_path', nargs='?')
+    parser.add_argument('name', nargs='?')
+    parser.add_argument('hostname', nargs='?')
+    parser.add_argument('port', type=int, nargs='?')
     parser.add_argument('-savestate', default=None)
     parser.add_argument('-password', default=None)
 
     args = parser.parse_args()
 
-    main(args.rom_path, args.name, args.hostname, args.port, args.savestate, args.password)
+    if args.rom_path:
+        rom_path = args.rom_path
+    else:
+        rom_path = input("Path to rom (if in same folder, just rom name): ")
+
+    if args.name:
+        name = args.name
+    else:
+        name = input("Nickname: ")
+
+    if args.hostname:
+        hostname = args.hostname
+    else:
+        hostname = input("Hostname (Will likely be an ip address): ")
+
+    if args.port:
+        port = args.port
+    else:
+        port = int(input("Port number: "))
+
+    main(rom_path, name, hostname, port, args.savestate, args.password)

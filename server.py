@@ -83,6 +83,8 @@ class PokeServer(Server):
         self.players[player] = True
         print(self.players)
         player.Send({"action": "getGameOptions", "game_options": {key: value for key, value in self.serverOptions.items() if key != "password"}})
+        #a message to other players to force a gamestate update so that this new player can have initial info -- map etc.
+        self.sendToPlayer({"action": "forceGamestateUpdate", "who": player.nickname})
 
     def delPlayer(self, player):
         print("Deleting Player: " + player.nickname)
