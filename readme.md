@@ -57,7 +57,7 @@ This was a first go for me at working with both (virtualized) gameboy hardware a
 
 * Locking out items also locks out events (such as obtaining the starter pokemon) and is thus likely to break the game.
 * Wild pokemon lockout works...mostly. Due to the oddities of the first generation catch algorithm it is absolutely bypassable by the Master ball. Still, it does work:
-![catch lockout](catchlockout.png)
+![catch lockout](catchlockout.PNG)
 * Numerous graphical glitches (phasing over menus etc.) with the other player on screen
 
 
