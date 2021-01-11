@@ -1,3 +1,5 @@
+#Multimon object defs. Craig Messner.
+
 from dataclasses import dataclass
 from constants import *
 

@@ -1,3 +1,5 @@
+#Multimon server. Craig Messner.
+
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
 from time import sleep

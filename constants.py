@@ -1,3 +1,6 @@
+#Multimon constants. Craig Messner.
+
+
 #MEMORY ADDRESSES
 
 #The range for the "owned" pokemon data in the pokedex.

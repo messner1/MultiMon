@@ -1,3 +1,6 @@
+#Multimon client. Craig Messner.
+
+
 import ctypes.wintypes
 import os
 os.environ["PYSDL2_DLL_PATH"] = "."
