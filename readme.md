@@ -52,7 +52,7 @@ and optionally:
 * -savestate: the location of a savestate to use
 * -password: a server password, if required
 
-##Issues, etc.
+## Issues, etc.
 This was a first go for me at working with both (virtualized) gameboy hardware and netcode, as such treat it gingerly. Desyncs are absolutely possible, and there are unresolved issues with the gamestate:
 
 * Locking out items also locks out events (such as obtaining the starter pokemon) and is thus likely to break the game.
